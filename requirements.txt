@@ -3,3 +3,6 @@ uvicorn[standard]
 python-dotenv
 pydantic
 python-multipart
+openai-whisper
+# It might require torch, but pip will resolve dependencies.
+# Also ensure ffmpeg is installed system-wide for whisper to work.
