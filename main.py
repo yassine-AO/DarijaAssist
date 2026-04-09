@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import logging
-from api.routes import ping, ask, services
+from api.routes import ping, ask, services, transcribe
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -64,3 +64,4 @@ app = FastAPI(
 app.include_router(ping.router)
 app.include_router(ask.router)
 app.include_router(services.router)
+app.include_router(transcribe.router)
