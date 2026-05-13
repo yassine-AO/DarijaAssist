@@ -1,15 +1,15 @@
 """
-TTS Service — ElevenLabs (primary) + Piper (fallback)
+TTS Service — Gemini (primary) + Piper (fallback)
 =====================================================
-Converts Darija text into audio bytes (MP3 from ElevenLabs, WAV from Piper).
+Converts Darija text into audio bytes (WAV from Gemini, WAV from Piper).
 
 Strategy:
-    1. Try ElevenLabs (eleven_multilingual_v2, Arabic-capable voice).
-    2. If ElevenLabs fails for *any* reason (quota, network, auth …),
+    1. Try Gemini (gemini-2.5-flash-tts).
+    2. If Gemini fails for *any* reason (quota, network, auth …),
        fall back to the local Piper TTS engine (ar_JO model).
 
 The service always returns raw audio bytes and the corresponding format
-string ("mp3" or "wav") so the caller can save / stream as needed.
+string ("wav") so the caller can save / stream as needed.
 
 Usage:
     from services.tts_service import TTSService
@@ -27,6 +27,7 @@ import wave
 from pathlib import Path
 from typing import Optional
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 # ---------------------------------------------------------------------------
@@ -37,10 +38,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-# ElevenLabs
-ELEVENLABS_DEFAULT_VOICE  = "PmGnwGtnBs40iau7JfoF"   # jawad — multilingual
-ELEVENLABS_DEFAULT_MODEL  = "eleven_multilingual_v2"
-ELEVENLABS_OUTPUT_FORMAT  = "mp3_44100_128"
+# Gemini
+GEMINI_DEFAULT_VOICE = "Kore"
+GEMINI_DEFAULT_MODEL = "gemini-2.5-flash-preview-tts"
 
 # Piper (local fallback)
 _PIPER_MODEL_DIR   = Path(__file__).resolve().parent.parent / "models" / "piper"
@@ -54,37 +54,37 @@ _PIPER_CONFIG_URL  = _PIPER_MODEL_URL + ".json"
 
 class TTSService:
     """
-    Text-to-Speech service with automatic ElevenLabs → Piper fallback.
+    Text-to-Speech service with automatic Gemini → Piper fallback.
 
     Initialisation:
-        • Checks for ``ELEVENLABS_API_KEY`` in env / .env.
-        • If missing, logs a warning and disables the ElevenLabs path.
+        • Checks for ``GEMINI_API_KEY`` in env / .env.
+        • If missing, logs a warning and disables the Gemini path.
         • Pre-checks (lazy) for the Piper model files.
     """
 
     def __init__(
         self,
-        elevenlabs_api_key: Optional[str] = None,
-        elevenlabs_voice_id: str = ELEVENLABS_DEFAULT_VOICE,
-        elevenlabs_model_id: str = ELEVENLABS_DEFAULT_MODEL,
+        gemini_api_key: Optional[str] = None,
+        gemini_voice: str = GEMINI_DEFAULT_VOICE,
+        gemini_model_id: str = GEMINI_DEFAULT_MODEL,
     ):
         load_dotenv()
 
-        # ---------- ElevenLabs ----------
-        self._el_key      = elevenlabs_api_key or os.getenv("ELEVENLABS_API_KEY")
-        self._el_voice_id = elevenlabs_voice_id
-        self._el_model_id = elevenlabs_model_id
-        self._el_client   = None
+        # ---------- Gemini ----------
+        self._gemini_key   = gemini_api_key or os.getenv("GEMINI_API_KEY")
+        self._gemini_voice = gemini_voice
+        self._gemini_model = gemini_model_id
+        self._gemini_client = None
 
-        if self._el_key:
+        if self._gemini_key:
             try:
-                from elevenlabs.client import ElevenLabs
-                self._el_client = ElevenLabs(api_key=self._el_key)
-                logger.info("✅ ElevenLabs client ready (voice=%s).", self._el_voice_id)
+                from google import genai
+                self._gemini_client = genai.Client(api_key=self._gemini_key)
+                logger.info("✅ Gemini client ready (voice=%s).", self._gemini_voice)
             except Exception as exc:
-                logger.warning("⚠️  ElevenLabs init failed, will rely on Piper: %s", exc)
+                logger.warning("⚠️  Gemini init failed, will rely on Piper: %s", exc)
         else:
-            logger.warning("⚠️  ELEVENLABS_API_KEY not set — ElevenLabs disabled.")
+            logger.warning("⚠️  GEMINI_API_KEY not set — Gemini disabled.")
 
         # ---------- Piper ----------
         self._piper_voice = None   # lazy-loaded on first fallback call
@@ -104,24 +104,24 @@ class TTSService:
 
         Returns:
             (audio_bytes, format_string)
-            format_string is ``"mp3"`` (ElevenLabs) or ``"wav"`` (Piper).
+            format_string is ``"wav"``.
 
         Raises:
             ValueError:  If the text is empty.
-            RuntimeError: If both ElevenLabs *and* Piper fail.
+            RuntimeError: If both Gemini *and* Piper fail.
         """
         if not text or not text.strip():
             raise ValueError("TTS input text cannot be empty.")
 
-        # --- Try ElevenLabs first ---
-        if self._el_client:
+        # --- Try Gemini first ---
+        if self._gemini_client:
             try:
-                audio = self._synthesize_elevenlabs(text)
-                logger.info("🔊 Synthesised via ElevenLabs (%d bytes, mp3).", len(audio))
-                return audio, "mp3"
+                audio = self._synthesize_gemini(text)
+                logger.info("🔊 Synthesised via Gemini (%d bytes, wav).", len(audio))
+                return audio, "wav"
             except Exception as exc:
                 logger.warning(
-                    "⚠️  ElevenLabs synthesis failed, falling back to Piper: %s", exc
+                    "⚠️  Gemini synthesis failed, falling back to Piper: %s", exc
                 )
 
         # --- Fallback: Piper ---
@@ -137,27 +137,50 @@ class TTSService:
             ) from exc
 
     # ------------------------------------------------------------------
-    # ElevenLabs backend
+    # Gemini backend
     # ------------------------------------------------------------------
 
-    def _synthesize_elevenlabs(self, text: str) -> bytes:
-        """Call ElevenLabs TTS and return MP3 bytes."""
-        response = self._el_client.text_to_speech.convert(
-            text=text,
-            voice_id=self._el_voice_id,
-            model_id=self._el_model_id,
-            output_format=ELEVENLABS_OUTPUT_FORMAT,
+    def _synthesize_gemini(self, text: str) -> bytes:
+        """Call Gemini TTS and return WAV bytes."""
+        from google.genai import types
+        
+        response = self._gemini_client.models.generate_content(
+            model=self._gemini_model,
+            contents=text,
+            config=types.GenerateContentConfig(
+                response_modalities=["audio"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=self._gemini_voice
+                        )
+                    )
+                )
+            )
         )
 
-        # The SDK returns an iterator of chunks
-        chunks = []
-        for chunk in response:
-            chunks.append(chunk)
-
-        audio_bytes = b"".join(chunks)
+        audio_bytes = None
+        if response.candidates and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if part.inline_data:
+                    raw_pcm = part.inline_data.data
+                    
+                    # Gemini returns raw PCM audio (audio/L16;codec=pcm;rate=24000)
+                    # We must wrap it in a proper WAV header so players can read it.
+                    import wave
+                    import io
+                    buf = io.BytesIO()
+                    with wave.open(buf, "wb") as wav_file:
+                        wav_file.setnchannels(1)      # Mono
+                        wav_file.setsampwidth(2)      # 16-bit
+                        wav_file.setframerate(24000)  # 24 kHz
+                        wav_file.writeframes(raw_pcm)
+                    
+                    audio_bytes = buf.getvalue()
+                    break
 
         if not audio_bytes:
-            raise RuntimeError("ElevenLabs returned empty audio.")
+            raise RuntimeError("Gemini returned empty audio.")
 
         return audio_bytes
 
@@ -200,6 +223,7 @@ class TTSService:
 
         onnx_path = self._ensure_piper_model()
 
+        # pyrefly: ignore [missing-import]
         from piper import PiperVoice
 
         logger.info("Loading Piper voice from %s …", onnx_path)
@@ -226,9 +250,9 @@ class TTSService:
     # ------------------------------------------------------------------
 
     @property
-    def elevenlabs_available(self) -> bool:
-        """True if ElevenLabs client is initialised."""
-        return self._el_client is not None
+    def gemini_available(self) -> bool:
+        """True if Gemini client is initialised."""
+        return self._gemini_client is not None
 
     @property
     def piper_model_downloaded(self) -> bool:
@@ -236,6 +260,6 @@ class TTSService:
         return (_PIPER_MODEL_DIR / f"{_PIPER_MODEL_NAME}.onnx").exists()
 
     def __repr__(self) -> str:
-        el = "ready" if self.elevenlabs_available else "disabled"
+        gm = "ready" if self.gemini_available else "disabled"
         pp = "downloaded" if self.piper_model_downloaded else "not yet"
-        return f"<TTSService elevenlabs={el} piper_model={pp}>"
+        return f"<TTSService gemini={gm} piper_model={pp}>"

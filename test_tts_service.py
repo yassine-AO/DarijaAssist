@@ -1,7 +1,7 @@
 """
 test_tts_service.py
 ===================
-Smoke-tests for the TTSService (ElevenLabs + Piper fallback).
+Smoke-tests for the TTSService (Gemini + Piper fallback).
 
 Run from the project root:
     python test_tts_service.py
@@ -9,15 +9,15 @@ Run from the project root:
 What is tested
 --------------
 1. Happy path   — Darija text → audio bytes saved to disk.
-2. Piper only   — Force the Piper fallback (no ElevenLabs key).
+2. Piper only   — Force the Piper fallback (no Gemini key).
 3. Empty input  — must raise ValueError immediately.
 
 Output files are written to tests_output/ for manual listening.
 
 Requirements
 ------------
-• ELEVENLABS_API_KEY in .env  (optional — Piper still works without it)
-• pip install elevenlabs piper-tts requests python-dotenv
+• GEMINI_API_KEY in .env  (optional — Piper still works without it)
+• pip install google-genai piper-tts requests python-dotenv
 """
 
 import logging
@@ -67,7 +67,7 @@ def fail_label(label: str, reason: str) -> None:
 
 def test_synthesize_default(svc: TTSService) -> bool:
     """Full synthesis — uses whichever backend is available."""
-    section("Test 1 — Default synthesis (ElevenLabs → Piper fallback)")
+    section("Test 1 — Default synthesis (Gemini → Piper fallback)")
 
     try:
         audio, fmt = svc.synthesize(DARIJA_TEXT)
@@ -85,20 +85,20 @@ def test_synthesize_default(svc: TTSService) -> bool:
 
 
 def test_piper_only() -> bool:
-    """Force Piper by creating a service with no ElevenLabs key."""
-    section("Test 2 — Piper-only (no ElevenLabs key)")
+    """Force Piper by creating a service with no Gemini key."""
+    section("Test 2 — Piper-only (no Gemini key)")
 
     try:
-        svc_piper = TTSService(elevenlabs_api_key="__disabled__")
-        # The invalid key will cause ElevenLabs init to fail → only Piper
+        svc_piper = TTSService(gemini_api_key="__disabled__")
+        # The invalid key will cause Gemini init to fail → only Piper
         # But actually we should pass a clearly invalid key so it errors
         # OR just pass nothing. Let's create one with explicitly no key.
         svc_piper = TTSService.__new__(TTSService)
-        # Manually init with no ElevenLabs
-        svc_piper._el_client = None
-        svc_piper._el_key = None
-        svc_piper._el_voice_id = None
-        svc_piper._el_model_id = None
+        # Manually init with no Gemini
+        svc_piper._gemini_client = None
+        svc_piper._gemini_key = None
+        svc_piper._gemini_voice = None
+        svc_piper._gemini_model = None
         svc_piper._piper_voice = None
 
         audio, fmt = svc_piper.synthesize(DARIJA_TEXT)
