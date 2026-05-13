@@ -4,5 +4,14 @@ python-dotenv
 pydantic
 python-multipart
 openai-whisper
+datasets
+jiwer
+soundfile
+requests
+transformers
+sentencepiece
 # It might require torch, but pip will resolve dependencies.
 # Also ensure ffmpeg is installed system-wide for whisper to work.
+groq                            # Groq Cloud API — used by AnswerService
+elevenlabs                      # ElevenLabs TTS — used by TTSService
+piper-tts                       # Piper TTS (local fallback) — used by TTSService

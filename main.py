@@ -35,13 +35,35 @@ async def lifespan(app: FastAPI):
     except ImportError:
         logger.warning("Whisper library not installed. Please run: pip install openai-whisper")
     
-    # 2. Other models (NLLB, TTS, RAG) - Commented out for now
-    # logger.info("Loading NLLB model...")
-    # models_loaded_status["nllb"] = True
-    # logger.info("Loading TTS model...")
-    # models_loaded_status["tts"] = True
-    # logger.info("Loading RAG models...")
-    # models_loaded_status["rag"] = True
+    # 2. Load NLLB Translation Model (AtlasIA Terjman-Ultra)
+    logger.info("Loading NLLB translation model...")
+    try:
+        from services.translation_service import TranslationService
+        ml_models["nllb"] = TranslationService()
+        models_loaded_status["nllb"] = True
+        logger.info("NLLB translation model loaded successfully.")
+    except Exception as e:
+        logger.warning("NLLB model failed to load: %s", e)
+
+    # 3. Load Answer Service (Groq)
+    logger.info("Loading Answer service...")
+    try:
+        from services.answer_service import AnswerService
+        ml_models["answer"] = AnswerService()
+        models_loaded_status["rag"] = True # Marking RAG as ready since AnswerService is grounded
+        logger.info("Answer service loaded successfully.")
+    except Exception as e:
+        logger.warning("Answer service failed to load: %s", e)
+
+    # 4. Load TTS Service (ElevenLabs + Piper Fallback)
+    logger.info("Loading TTS service...")
+    try:
+        from services.tts_service import TTSService
+        ml_models["tts"] = TTSService()
+        models_loaded_status["tts"] = True
+        logger.info("TTS service loaded successfully.")
+    except Exception as e:
+        logger.warning("TTS service failed to load: %s", e)
     
     # Attach our status and models to app.state so routes can access them
     app.state.models_status = models_loaded_status

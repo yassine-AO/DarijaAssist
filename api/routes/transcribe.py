@@ -13,7 +13,7 @@ class TranscribeResponse(BaseModel):
 @router.post("/transcribe", response_model=TranscribeResponse)
 def transcribe(request: Request, audio: UploadFile = File(...)):
     """
-    Transcribe audio file using Whisper.
+    Transcribe audio file using Whisper. This is only for evaluating the whisper model on a dataset.
     Input: audio file (wav, mp3, m4a, etc.)
     Output: raw transcription text
     """
