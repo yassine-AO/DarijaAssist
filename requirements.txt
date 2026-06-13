@@ -15,3 +15,5 @@ sentencepiece
 groq                            # Groq Cloud API — used by AnswerService
 google-genai                    # Google Gemini API — used by TTSService
 piper-tts                       # Piper TTS (local fallback) — used by TTSService
+faiss-cpu                       # Vector similarity search engine for RAG
+sentence-transformers           # Embedding generation model for RAG

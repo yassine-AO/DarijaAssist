@@ -27,9 +27,18 @@ async def lifespan(app: FastAPI):
     logger.info("Loading Whisper model...")
     try:
         import whisper
-        # You can change "base" to "tiny", "small", "medium", or "large-v3"
-        # Since it's for Darija, you might want to use "large-v3" if passing raw audio or a fine-tuned model
-        ml_models["whisper"] = whisper.load_model("base")
+        from pathlib import Path
+        
+        # Check for custom fine-tuned Whisper model checkpoint
+        custom_whisper_path = Path(__file__).resolve().parent / "models" / "whisper" / "darija_whisper.pt"
+        
+        if custom_whisper_path.exists():
+            logger.info("✅ Custom fine-tuned Whisper model found at '%s'. Loading...", custom_whisper_path)
+            ml_models["whisper"] = whisper.load_model(str(custom_whisper_path))
+        else:
+            logger.info("No custom model found at '%s'. Loading standard 'base' Whisper model...", custom_whisper_path)
+            ml_models["whisper"] = whisper.load_model("base")
+            
         models_loaded_status["whisper"] = True
         logger.info("Whisper model loaded successfully.")
     except ImportError:
@@ -45,17 +54,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("NLLB model failed to load: %s", e)
 
-    # 3. Load Answer Service (Groq)
+    # 3. Load RAG Service (FAISS)
+    logger.info("Loading RAG service...")
+    try:
+        from services.rag_service import RAGService
+        ml_models["rag"] = RAGService()
+        models_loaded_status["rag"] = True
+        logger.info("RAG service loaded successfully.")
+    except Exception as e:
+        logger.warning("RAG service failed to load: %s", e)
+
+    # 4. Load Answer Service (Groq)
     logger.info("Loading Answer service...")
     try:
         from services.answer_service import AnswerService
         ml_models["answer"] = AnswerService()
-        models_loaded_status["rag"] = True # Marking RAG as ready since AnswerService is grounded
         logger.info("Answer service loaded successfully.")
     except Exception as e:
         logger.warning("Answer service failed to load: %s", e)
 
-    # 4. Load TTS Service (ElevenLabs + Piper Fallback)
+    # 5. Load TTS Service (ElevenLabs + Piper Fallback)
     logger.info("Loading TTS service...")
     try:
         from services.tts_service import TTSService
