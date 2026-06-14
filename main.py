@@ -94,11 +94,21 @@ async def lifespan(app: FastAPI):
     ml_models.clear()
     logger.info("Models cleared from memory.")
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(
     title="DarijaAssist API",
     version="1.0.0",
     description="Voice AI agent for Moroccan government services - API Contract v1.0",
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(ping.router)
